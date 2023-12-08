@@ -4,9 +4,15 @@ source:
   rpc_port: 50004
   executor_port: 50002
 sink:
-  type: "csv"
-  path: "./output/"
+  type: "doris"
+  endpoint: "http://127.0.0.1:8030"
+  database: "citacloud1"
+  user: "root"
+  password: ""
+#sink:
+#  type: "csv"
+#  path: "./output/"
 range:
-  start: 1
-  end: 700
+  start: 700
+  end: 100000
   duration: 1

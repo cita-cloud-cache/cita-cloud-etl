@@ -103,7 +103,7 @@ get_system_config_fmt = 'cldi -c default get system-config {}'
 save_default_ctx_fmt = 'cldi -r {} -e {} -u default context save default'
 
 support_source_type = ["cldi"]
-support_sink_type = ["csv"]
+support_sink_type = ["csv", "doris"]
 
 
 with open('config.yaml',encoding='utf-8') as config_file:
@@ -151,7 +151,16 @@ if config['source']['type'] == 'cldi':
     # set default context
     subprocess.run(save_default_ctx_fmt.format("{}:{}".format(config['source']['endpoint'], config['source']['rpc_port']), "{}:{}".format(config['source']['endpoint'], config['source']['executor_port'])), shell=True)
 
+    current_block_number = int(subprocess.check_output(get_block_number, shell=True).decode('utf-8').strip())
+
     for h in range(real_start_block_number, end_block_number):
+        if h > current_block_number:
+            print('wait for new block...')
+            while True:
+                time.sleep(1)
+                current_block_number = int(subprocess.check_output(get_block_number, shell=True).decode('utf-8').strip())
+                if h <= current_block_number:
+                    break
         # update progress
         bar.next()
         # set progress ahead
@@ -273,4 +282,63 @@ if config['source']['type'] == 'cldi':
                 event_f.write('{},{},{},{},{},{},{}\n'.format(event_row.address, event_row.topics, event_row.data, event_row.height, event_row.log_index, event_row.tx_log_index, event_row.tx_hash))
             if is_system_config_changed:
                 system_config_f.write('{},{},{},{},{},{},{},{},{}\n'.format(system_config_row.height, system_config_row.admin, system_config_row.block_interval, system_config_row.block_limit, system_config_row.chain_id, system_config_row.emergency_brake, system_config_row.quota_limit, system_config_row.validators, system_config_row.version))
+        elif config['sink']['type'] == 'doris':
+            # write to json
+            with open('block-{}.json'.format(h), 'w') as json_file:
+                json_file.write(json.dumps(block_row.__dict__))
+                json_file.write('\n')
+            upload_block_cmd = 'curl -v --location-trusted -u {}:{} -H "format: json" -T block-{}.json {}/api/{}/blocks/_stream_load'.format(config['sink']['user'], config['sink']['password'], h, config['sink']['endpoint'], config['sink']['database'])
+            ret = subprocess.run(upload_block_cmd, shell=True)
+            if ret.returncode != 0:
+                print("run cmd failed!")
+                exit(-1)
+            if tx_rows.__len__() > 0:
+                with open('txs-{}.json'.format(h), 'w') as json_file:
+                    for tx_row in tx_rows:
+                        json_file.write(json.dumps(tx_row.__dict__))
+                        json_file.write('\n')
+                upload_txs_cmd = 'curl -v --location-trusted -u {}:{} -H "format: json" -H "read_json_by_line: true" -T txs-{}.json {}/api/{}/txs/_stream_load'.format(config['sink']['user'], config['sink']['password'], h, config['sink']['endpoint'], config['sink']['database'])
+                ret = subprocess.run(upload_txs_cmd, shell=True)
+                if ret.returncode != 0:
+                    print("run cmd failed!")
+                    exit(-1)
+            if utxo_rows.__len__() > 0:
+                with open('utxos-{}.json'.format(h), 'w') as json_file:
+                    for utxo_row in utxo_rows:
+                        json_file.write(json.dumps(utxo_row.__dict__))
+                        json_file.write('\n')
+                upload_utxos_cmd = 'curl -v --location-trusted -u {}:{} -H "format: json" -H "read_json_by_line: true" -T utxos-{}.json {}/api/{}/utxos/_stream_load'.format(config['sink']['user'], config['sink']['password'], h, config['sink']['endpoint'], config['sink']['database'])
+                ret = subprocess.run(upload_utxos_cmd, shell=True)
+                if ret.returncode != 0:
+                    print("run cmd failed!")
+                    exit(-1)
+            if receipt_rows.__len__() > 0:
+                with open('receipts-{}.json'.format(h), 'w') as json_file:
+                    for receipt_row in receipt_rows:
+                        json_file.write(json.dumps(receipt_row.__dict__))
+                        json_file.write('\n')
+                upload_receipts_cmd = 'curl -v --location-trusted -u {}:{} -H "format: json" -H "read_json_by_line: true" -T receipts-{}.json {}/api/{}/receipts/_stream_load'.format(config['sink']['user'], config['sink']['password'], h, config['sink']['endpoint'], config['sink']['database'])
+                ret = subprocess.run(upload_receipts_cmd, shell=True)
+                if ret.returncode != 0:
+                    print("run cmd failed!")
+                    exit(-1)
+            if event_rows.__len__() > 0:
+                with open('events-{}.json'.format(h), 'w') as json_file:
+                    for event_row in event_rows:
+                        json_file.write(json.dumps(event_row.__dict__))
+                        json_file.write('\n')
+                upload_events_cmd = 'curl -v --location-trusted -u {}:{} -H "format: json" -H "read_json_by_line: true" -T events-{}.json {}/api/{}/logs/_stream_load'.format(config['sink']['user'], config['sink']['password'], h, config['sink']['endpoint'], config['sink']['database'])
+                ret = subprocess.run(upload_events_cmd, shell=True)
+                if ret.returncode != 0:
+                    print("run cmd failed!")
+                    exit(-1)
+            if is_system_config_changed:
+                with open('system_config-{}.json'.format(h), 'w') as json_file:
+                    json_file.write(json.dumps(system_config_row.__dict__))
+                    json_file.write('\n')
+                upload_system_config_cmd = 'curl -v --location-trusted -u {}:{} -H "format: json" -T system_config-{}.json {}/api/{}/system_config/_stream_load'.format(config['sink']['user'], config['sink']['password'], h, config['sink']['endpoint'], config['sink']['database'])
+                ret = subprocess.run(upload_system_config_cmd, shell=True)
+                if ret.returncode != 0:
+                    print("run cmd failed!")
+                    exit(-1)
 bar.finish()

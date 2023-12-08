@@ -261,31 +261,31 @@ cldi> get sc
   ```
 4. 事件
   ```SQL
-  CREATE TABLE IF NOT EXISTS logs
-  (
-    `address` VARCHAR INDEX,
-    `topics` VARCHAR,
-    `data` VARCHAR,
-    `height` BIGINT INDEX,
-    `log_index` INT,
-    `tx_log_index` INT,
-    `tx_hash` VARCHAR INDEX,
-  )
+CREATE TABLE IF NOT EXISTS logs
+(
+  `address` VARCHAR,
+  `topics` VARCHAR,
+  `data` VARCHAR,
+  `height` BIGINT,
+  `log_index` INT,
+  `tx_log_index` INT,
+  `tx_hash` VARCHAR,
+)
   ```
 5. 其他
   ```SQL
-  CREATE TABLE IF NOT EXISTS system_config
-  (
-    `height` BIGINT INDEX,
-    `admin` VARCHAR,
-    `block_interval` INT,
-    `block_limit` INT,
-    `chain_id` VARCHAR,
-    `emergency_brake` BOOLEAN,
-    `quota_limit` BIGINT,
-    `validators` VARCHAR,
-    `version` INT,
-  )
+CREATE TABLE IF NOT EXISTS system_config
+(
+  `height` BIGINT INDEX,
+  `admin` VARCHAR,
+  `block_interval` INT,
+  `block_limit` INT,
+  `chain_id` VARCHAR,
+  `emergency_brake` BOOLEAN,
+  `quota_limit` BIGINT,
+  `validators` VARCHAR,
+  `version` INT,
+)
   ```
 
 ### 加载
@@ -302,4 +302,47 @@ ETL 是数据应用过程中的一个数据流（pipeline）的处理技术，�
 
 这样可以方便用户灵活组合。
 
+#### source
+目前仅支持`cldi`类型，需要指定连接的节点的`endpoint`和端口。
 
+```yaml
+source:
+  type: "cldi"
+  endpoint: "127.0.0.1"
+  rpc_port: 50004
+  executor_port: 50002
+```
+
+#### sink
+
+目前支持`CSV`文件和`doris`。
+
+```yaml
+sink:
+  type: "csv"
+  path: "./output/"
+```
+
+```yaml
+sink:
+  type: "doris"
+  endpoint: "http://127.0.0.1:8030"
+  database: "citacloud"
+  user: "root"
+  password: ""
+```
+
+#### range
+
+```yaml
+range:
+  start: 1
+  end: 700
+  duration: 1
+```
+
+本次导出数据的范围，起始和结束区块高度，区间为前闭后开。
+
+结束区块高度可以超出当前区块高度，本工具会自动进入`CDC`模式。
+
+以及为了防止过于频繁访问节点而增加的间隔事件。
